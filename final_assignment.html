@@ -292,7 +292,8 @@ as.table(comp)</code></pre>
 ## D    0    0   20 2551    2 0.008550330
 ## E    0    0    2    6 2878 0.002772003</code></pre>
 <p>With a training accuracy of 99.34% and a kappa value of 99.16%.</p>
-<p>An estimate of the expected out of sample error is 1 minus the accuracy of the model applied to the test data set:</p>
+<p>We used cross validation to build our models, and to pick our prediction model. The best way to estimate the ‘out of sample error’, is by applying our prediction function to the independent test set.</p>
+<p>Therefore, an estimate of the expected out of sample error is 1 minus the accuracy of the model applied to the test data set:</p>
 <pre class="r"><code>1 - 0.9934</code></pre>
 <pre><code>## [1] 0.0066</code></pre>
 <p>Thus, the expected out of sample error of our prediction model is approximately 0.7%.</p>

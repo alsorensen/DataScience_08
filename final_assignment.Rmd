@@ -217,7 +217,10 @@ fit3rf
 ```
 With a training accuracy of 99.34% and a kappa value of 99.16%.
 
-An estimate of the expected out of sample error is 1 minus the accuracy of the model applied to the test data set:
+We used cross validation to build our models, and to pick our prediction model.
+The best way to estimate the 'out of sample error', is by applying our prediction function to the independent test set.
+
+Therefore, an estimate of the expected out of sample error is 1 minus the accuracy of the model applied to the test data set:
 ```{r}
 1 - 0.9934
 ```
