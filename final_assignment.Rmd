@@ -1,0 +1,228 @@
+---
+title: "Practical Machine Learning - Final Assignment"
+author: "Allan Sorensen"
+date: "December 11, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data 
+about personal activity relatively inexpensively. 
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify
+how well they do it. Here we use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+The goal is to build a model that can predict in which of the 5 ways the exercise was performed given the set of measurements.
+
+## Required R packages
+
+Let us load a few R packages and set the random seed as well:
+```{r, message=FALSE}
+library(caret)
+library(randomForest)
+library(e1071)
+set.seed(12345)
+```
+
+## Data
+
+### Obtaining the data
+
+We download data to the data folder in the working directory and create the data folder if it does not exist.
+after that we read the data.
+
+```{r}
+# Download
+if (!file.exists("data")){
+    dir.create("data")
+}
+if (!file.exists("data/pml-training.csv")){
+    fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+    fileDownloadDest <- "data/pml-training.csv"
+    download.file(fileUrl, fileDownloadDest, method = "curl")
+}
+if (!file.exists("data/pml-testing.csv")){
+    fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+    fileDownloadDest <- "data/pml-testing.csv"
+    download.file(fileUrl, fileDownloadDest, method = "curl")
+}
+# Read the data
+trainingRaw <- read.csv("data/pml-training.csv")
+testingRaw  <- read.csv("data/pml-testing.csv")
+# Dimensions of the data
+dim(trainingRaw); dim(testingRaw)
+```
+
+
+### Exploratory data analysis and cleaning of the data
+
+If we use the command 'head(training)' and 'summary(head)' we see that there a lot of missing values 'NA's
+and quite a few missing values in the form of 'empty strings' and '#DIV/0!'. To handle these cases we first translate 
+them into 'NA's and handle all those cases afterwards.
+```{r, eval=FALSE}
+# These expressions are not evaluated here, since a lot of output is generated
+head(trainingRaw)
+summary(trainingRaw)
+```
+Let us define a function to be able to insert 'NA' values into the dataframe (based on http://stackoverflow.com/questions/11809854/insert-na-values-into-dataframe):
+```{r}
+blankEtc2na <- function(x){
+    if(any(is.na(x) | x == "" | trimws(x) == "#DIV/0!")){
+        return(NA)
+    } else {
+       return(x)
+    }
+}
+```
+Let us apply that function to replace the bad stuff with NA's and obtain a new data frame:
+```{r}
+training0 <- data.frame(sapply(trainingRaw, blankEtc2na))
+```
+Now, we can count the number of NA's in each column. We pick the columns of 'training0' where there is less than 100 NA's
+except for the first columns that include information about the data index the time of the exercise as well as the names
+of the persons:
+```{r}
+# Columns to pick
+colPick <- colSums(is.na(training0)) < 100; colPick[1:7] = FALSE
+# Data: training and testing data (final version after cleaning)
+trainingFinal <- training0[,colPick]
+testingFinal <- testingRaw[,colPick]
+# Dimensions of the data
+dim(trainingFinal); dim(testingFinal)
+```
+
+
+
+### Splitting the data
+
+The data in testingFinal is for the following Quiz, since there is no variable 'classe' contained in the data.
+As in the 'Prediction Study Design' lecture we split the trainingFinal data into training and testing
+data sets. Here we choose 80% for training using cross validation and 20% for testing:
+
+```{r}
+inTrain = createDataPartition(trainingFinal$classe, p = 0.8)[[1]]
+training = trainingFinal[ inTrain,]
+testing = trainingFinal[-inTrain,]
+# Dimensions of the data
+dim(training); dim(testing)
+```
+
+
+
+## Model Building
+
+In this classification study we compare the performance of four different algotihms.
+
+### Cross validation
+
+There is a tradeoff between a model's ability to minimize bias and variance.
+As stated on p. 243 in 'The Elements of Statistial Learning' by Hastie et. al 2009:
+'five- or tenfold cross-validation are recommended as a good compromise'.
+We use tenfold cross validation in the development of the models below. Thus we define:
+```{r}
+ctrl <- trainControl(method = "cv", number = 10)
+```
+
+
+### Model 1: Tree-Based Model (CART)
+
+Our first model is as illustrated in the lecture 'Predicting with trees' using "rpart".
+More details are provided at http://topepo.github.io/caret/train-models-by-tag.html#tree-based-model.
+We fit the model, predict the outcome on the test data and compute the accuracy of the model:
+```{r, cache=TRUE, message=FALSE}
+fit1rpart <- train(classe ~ ., method = "rpart", trControl = ctrl, data = training)
+pred1rpart <- predict(fit1rpart, newdata = testing)
+cfm1 <- confusionMatrix(testing$classe, pred1rpart)
+cfm1$overall['Accuracy']
+```
+The accuracy of this model is not impressing. It seems that a more advanced approach is needed.
+
+
+
+### Model 2: Boosting (Stochastic Gradient Boosting)
+
+Our second model is as illustrated in the lecture 'Boosing' using "gbm" (boosing with trees).
+More details are provided at http://topepo.github.io/caret/train-models-by-tag.html#Boosting.
+We fit the model, predict the outcome on the test data and compute the accuracy of the model:
+```{r, cache=TRUE, message=FALSE}
+fit2gbm <- train(classe ~ ., method = "gbm", trControl = ctrl, verbose = FALSE, data = training)
+pred2gbm <- predict(fit2gbm, newdata = testing)
+cfm2 <- confusionMatrix(testing$classe, pred2gbm)
+cfm2$overall['Accuracy']
+```
+We notice that we now have an accuracy of more than 96%.
+
+
+
+### Model 3: Random Forest
+
+Our third model is as illustrated in the lecture 'Random forests' using "rf".
+More details are provided at http://topepo.github.io/caret/train-models-by-tag.html#random-forest
+As suggested in the exercise for week 3 we 'use randomForest() specifically, not caret.
+We fit the model, predict the outcome on the test data and compute the accuracy of the model:
+```{r, cache=TRUE}
+fit3rf <- randomForest(classe ~ ., method = "rf", trControl = ctrl, data = training)
+pred3rf <- predict(fit3rf, newdata = testing)
+cfm3 <- confusionMatrix(testing$classe, pred3rf)
+cfm3$overall['Accuracy']
+```
+We see that the accuracy is more than 99% in this case.
+
+
+
+### Model 4: Support Vector Machines
+
+Our last model is as illustrated in Quiz 4.
+We fit the model, predict the outcome on the test data and compute the accuracy of the model:
+```{r, cache=TRUE}
+fit4svm <- svm(classe ~ . , cross = 10, data = training)
+pred4svm <- predict(fit4svm, testing)
+cfm4 <- confusionMatrix(testing$classe, pred4svm)
+cfm4$overall['Accuracy']
+```
+Here we have an accuracy close to 95%.
+
+
+
+
+## Model Selection
+
+The goal of this project is to predict the manner in which they did the exercise - predict the "classe" variable.
+For this we can use the 'Accuracy', but 'Kappa' might be a better measure according to
+'Applied Predictive Modeling' by Kuhn & Johnson, Springer, 5th printing 2016, p. 254-256.
+Let us compare both the accuracy and kappa values for our models:
+```{r}
+comp <- round(matrix(c(
+    cfm1$overall['Accuracy'], cfm2$overall['Accuracy'], cfm3$overall['Accuracy'], cfm4$overall['Accuracy'], 
+    cfm1$overall['Kappa'], cfm2$overall['Kappa'], cfm3$overall['Kappa'], cfm4$overall['Kappa']
+), ncol = 2),4)
+colnames(comp) <- c('Accuracy', 'Kappa')
+rownames(comp) <- c('1: Tree-Based Model (CART)', '2: Stochastic Gradient Boosting', '3: Random Forest', '4: Support Vector Machines')
+as.table(comp)
+```
+
+From the results above we see that the 'Random Forest' model seems to be best both with respect to the Accuracy and Kappa.
+Thus, we pick that model as our prediction model.
+
+## The Random Forest model
+
+The Random Forest model has the following characteristics:
+```{r}
+fit3rf
+```
+With a training accuracy of 99.34% and a kappa value of 99.16%.
+
+An estimate of the expected out of sample error is 1 minus the accuracy of the model applied to the test data set:
+```{r}
+1 - 0.9934
+```
+Thus, the expected out of sample error of our prediction model is approximately 0.7%.
+
+
+
+
